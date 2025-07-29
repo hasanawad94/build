@@ -150,11 +150,16 @@ func (src *BuildRun) ConvertTo(ctx context.Context, obj *unstructured.Unstructur
 		}
 	}
 
+	var latestTaskRunRef *string
+	if src.Status.ImageBuildRun != nil {
+		latestTaskRunRef = &src.Status.ImageBuildRun.Name
+	}
+
 	alphaBuildRun.Status = v1alpha1.BuildRunStatus{
 		Sources:          sourceStatus,
 		Output:           output,
 		Conditions:       conditions,
-		LatestTaskRunRef: src.Status.TaskRunName,
+		LatestTaskRunRef: latestTaskRunRef,
 		StartTime:        src.Status.StartTime,
 		CompletionTime:   src.Status.CompletionTime,
 	}
@@ -248,11 +253,19 @@ func (src *BuildRun) ConvertFrom(ctx context.Context, obj *unstructured.Unstruct
 		}
 	}
 
+	var imageBuildRun *ImageBuildRun
+	if alphaBuildRun.Status.LatestTaskRunRef != nil {
+		imageBuildRun = &ImageBuildRun{
+			Name: *alphaBuildRun.Status.LatestTaskRunRef,
+			Kind: "TaskRun",
+		}
+	}
+
 	src.Status = BuildRunStatus{
 		Source:         sourceStatus,
 		Output:         output,
 		Conditions:     conditions,
-		TaskRunName:    alphaBuildRun.Status.LatestTaskRunRef,
+		ImageBuildRun:  imageBuildRun,
 		StartTime:      alphaBuildRun.Status.StartTime,
 		CompletionTime: alphaBuildRun.Status.CompletionTime,
 		FailureDetails: src.Status.FailureDetails,

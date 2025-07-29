@@ -54,7 +54,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler, maxConcurrentReconciles in
 		CreateFunc: func(e event.TypedCreateEvent[*buildv1beta1.BuildRun]) bool {
 			// The CreateFunc is also called when the controller is started and iterates over all objects. For those BuildRuns that have a TaskRun referenced already,
 			// we do not need to do a further reconciliation. BuildRun updates then only happen from the TaskRun.
-			return e.Object.Status.TaskRunName == nil && e.Object.Status.CompletionTime == nil
+			return e.Object.Status.ImageBuildRun == nil && e.Object.Status.CompletionTime == nil
 		},
 		UpdateFunc: func(e event.TypedUpdateEvent[*buildv1beta1.BuildRun]) bool {
 			// Only reconcile a BuildRun update when
@@ -97,26 +97,72 @@ func add(mgr manager.Manager, r reconcile.Reconciler, maxConcurrentReconciles in
 		},
 	}
 
+	predPipelineRun := predicate.TypedFuncs[*pipelineapi.PipelineRun]{
+		UpdateFunc: func(e event.TypedUpdateEvent[*pipelineapi.PipelineRun]) bool {
+			o := e.ObjectOld
+			n := e.ObjectNew
+
+			// Process an update event when the old PR resource is not yet started and the new PR resource got a
+			// condition of the type Succeeded
+			if o.Status.StartTime.IsZero() && n.Status.GetCondition(apis.ConditionSucceeded) != nil {
+				return true
+			}
+
+			// Process an update event for every change in the condition.Reason between the old and new PR resource
+			if o.Status.GetCondition(apis.ConditionSucceeded) != nil && n.Status.GetCondition(apis.ConditionSucceeded) != nil {
+				if o.Status.GetCondition(apis.ConditionSucceeded).Reason != n.Status.GetCondition(apis.ConditionSucceeded).Reason {
+					return true
+				}
+			}
+			return false
+		},
+		DeleteFunc: func(e event.TypedDeleteEvent[*pipelineapi.PipelineRun]) bool {
+			// If the PipelineRun was deleted before completion, then we reconcile to update the BuildRun to a Failed status
+			return e.Object.Status.CompletionTime == nil
+		},
+	}
+
 	// Watch for changes to primary resource BuildRun
-	if err = c.Watch(source.Kind[*buildv1beta1.BuildRun](mgr.GetCache(), &buildv1beta1.BuildRun{}, &handler.TypedEnqueueRequestForObject[*buildv1beta1.BuildRun]{}, predBuildRun)); err != nil {
+	if err = c.Watch(source.Kind(mgr.GetCache(), &buildv1beta1.BuildRun{}, &handler.TypedEnqueueRequestForObject[*buildv1beta1.BuildRun]{}, predBuildRun)); err != nil {
 		return err
 	}
 
 	// enqueue Reconciles requests only for events where a TaskRun already exists and that is related
 	// to a BuildRun
-	return c.Watch(source.Kind(mgr.GetCache(), &pipelineapi.TaskRun{}, handler.TypedEnqueueRequestsFromMapFunc(func(_ context.Context, taskRun *pipelineapi.TaskRun) []reconcile.Request {
+	err = c.Watch(source.Kind(mgr.GetCache(), &pipelineapi.TaskRun{}, handler.TypedEnqueueRequestsFromMapFunc(func(_ context.Context, taskRun *pipelineapi.TaskRun) []reconcile.Request {
 		// check if TaskRun is related to BuildRun
 		if taskRun.GetLabels() == nil || taskRun.GetLabels()[buildv1beta1.LabelBuildRun] == "" {
 			return []reconcile.Request{}
 		}
-
+		// when it is, let's enqueue a new Reconcile Request for the BuildRun
 		return []reconcile.Request{
 			{
 				NamespacedName: types.NamespacedName{
-					Name:      taskRun.Name,
-					Namespace: taskRun.Namespace,
+					Name:      taskRun.GetLabels()[buildv1beta1.LabelBuildRun],
+					Namespace: taskRun.GetNamespace(),
 				},
 			},
 		}
 	}), predTaskRun))
+	if err != nil {
+		return err
+	}
+
+	// enqueue Reconciles requests only for events where a PipelineRun already exists and that is related
+	// to a BuildRun
+	return c.Watch(source.Kind(mgr.GetCache(), &pipelineapi.PipelineRun{}, handler.TypedEnqueueRequestsFromMapFunc(func(_ context.Context, pipelineRun *pipelineapi.PipelineRun) []reconcile.Request {
+		// check if PipelineRun is related to BuildRun
+		if pipelineRun.GetLabels() == nil || pipelineRun.GetLabels()[buildv1beta1.LabelBuildRun] == "" {
+			return []reconcile.Request{}
+		}
+		// when it is, let's enqueue a new Reconcile Request for the BuildRun
+		return []reconcile.Request{
+			{
+				NamespacedName: types.NamespacedName{
+					Name:      pipelineRun.GetLabels()[buildv1beta1.LabelBuildRun],
+					Namespace: pipelineRun.GetNamespace(),
+				},
+			},
+		}
+	}), predPipelineRun))
 }

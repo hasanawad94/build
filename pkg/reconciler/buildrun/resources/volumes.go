@@ -64,3 +64,50 @@ func CheckTaskRunVolumesExist(ctx context.Context, client client.Client, taskRun
 
 	return nil
 }
+
+// CheckPipelineRunVolumesExist iterates through the Tasks in a PipelineRun and checks if the referenced
+// secrets and configmaps for volumes exist.
+func CheckPipelineRunVolumesExist(ctx context.Context, client client.Client, pipelineRun *pipelineapi.PipelineRun) error {
+	for _, task := range pipelineRun.Spec.PipelineSpec.Tasks {
+		if task.TaskSpec != nil {
+			for _, volume := range task.TaskSpec.TaskSpec.Volumes {
+				var (
+					err  error
+					name string
+				)
+
+				switch {
+				case volume.Secret != nil:
+					secret := corev1.Secret{}
+					name = volume.Secret.SecretName
+					err = client.Get(ctx, namespacedName(name, pipelineRun.Namespace), &secret)
+				case volume.ConfigMap != nil:
+					configMap := corev1.ConfigMap{}
+					name = volume.ConfigMap.Name
+					err = client.Get(ctx, namespacedName(name, pipelineRun.Namespace), &configMap)
+				case volume.Projected != nil:
+					for _, projection := range volume.Projected.Sources {
+						if projection.ConfigMap != nil {
+							configMap := corev1.ConfigMap{}
+							name = projection.ConfigMap.Name
+							err = client.Get(ctx, namespacedName(name, pipelineRun.Namespace), &configMap)
+						}
+						if err == nil && projection.Secret != nil {
+							secret := corev1.Secret{}
+							name = projection.Secret.Name
+							err = client.Get(ctx, namespacedName(name, pipelineRun.Namespace), &secret)
+						}
+						if err != nil {
+							break
+						}
+					}
+				}
+
+				if err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
+}

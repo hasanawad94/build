@@ -79,6 +79,9 @@ const (
 
 	// environment variable to hold vulnerability count limit
 	VulnerabilityCountLimitEnvVar = "VULNERABILITY_COUNT_LIMIT"
+
+	// environment variable to switch from TaskRun to PipelineRun
+	EnableImageBuildRunnerEnvVar = "ENABLE_IMAGE_BUILD_RUNNER"
 )
 
 var (
@@ -107,6 +110,7 @@ type Config struct {
 	KubeAPIOptions                   KubeAPIOptions
 	GitRewriteRule                   bool
 	VulnerabilityCountLimit          int
+	EnableImageBuildRunner           bool
 }
 
 // PrometheusConfig contains the specific configuration for the
@@ -163,6 +167,7 @@ func NewDefaultConfig() *Config {
 		TerminationLogPath:            terminationLogPathDefault,
 		GitRewriteRule:                false,
 		VulnerabilityCountLimit:       50,
+		EnableImageBuildRunner:        false,
 
 		GitContainerTemplate: Step{
 			Image: gitDefaultImage,
@@ -453,6 +458,10 @@ func (c *Config) SetConfigFromEnv() error {
 
 	if terminationLogPath := os.Getenv(terminationLogPathEnvVar); terminationLogPath != "" {
 		c.TerminationLogPath = terminationLogPath
+	}
+
+	if enableImageBuildRunner := os.Getenv(EnableImageBuildRunnerEnvVar); enableImageBuildRunner != "" {
+		c.EnableImageBuildRunner = strings.ToLower(enableImageBuildRunner) == "true"
 	}
 
 	return nil

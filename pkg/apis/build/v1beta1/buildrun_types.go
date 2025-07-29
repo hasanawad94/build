@@ -221,6 +221,17 @@ type Output struct {
 	Vulnerabilities []Vulnerability `json:"vulnerabilities,omitempty"`
 }
 
+// ImageBuildRun defines the name and kind of the object responsible for executing the build
+type ImageBuildRun struct {
+	// Name of the referenced TaskRun or PipelineRun object
+	Name string `json:"name"`
+
+	// Kind of the referenced Tekton object
+	//
+	// +optional
+	Kind string `json:"kind,omitempty"`
+}
+
 // BuildRunStatus defines the observed state of BuildRun
 type BuildRunStatus struct {
 	// Source holds the results emitted from the source step
@@ -236,10 +247,10 @@ type BuildRunStatus struct {
 	// Conditions holds the latest available observations of a resource's current state.
 	Conditions Conditions `json:"conditions,omitempty"`
 
-	// TaskRunName is the name of the TaskRun responsible for executing this BuildRun.
+	// ImageBuildRun defines the name and kind of the object responsible for executing the build
 	//
 	// +optional
-	TaskRunName *string `json:"taskRunName,omitempty"`
+	ImageBuildRun *ImageBuildRun `json:"imageBuildRun,omitempty"`
 
 	// StartTime is the time the build is actually started.
 	// +optional

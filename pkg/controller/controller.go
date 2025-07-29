@@ -57,6 +57,9 @@ func NewManager(ctx context.Context, config *config.Config, cfg *rest.Config, op
 			&pipelineapi.TaskRun{}: {
 				Label: buildRunLabelExistsSelector,
 			},
+			&pipelineapi.PipelineRun{}: {
+				Label: buildRunLabelExistsSelector,
+			},
 		},
 	}
 
