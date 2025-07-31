@@ -200,7 +200,7 @@ func SetupImageProcessing(taskRun *pipelineapi.TaskRun, cfg *config.Config, crea
 				"--secret-path", secretMountPath,
 			)
 		}
-
+		sources.AppendWriteableVolumes(taskRun.Spec.TaskSpec, &imageProcessingStep)
 		// append the mutate step
 		taskRun.Spec.TaskSpec.Steps = append(taskRun.Spec.TaskSpec.Steps, imageProcessingStep)
 	}
